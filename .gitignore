@@ -1,0 +1,16 @@
+# Compiled binaries & object files
+benchmark
+benchmark.exe
+*.o
+*.obj
+*.out
+
+# Python
+__pycache__/
+*.py[cod]
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
