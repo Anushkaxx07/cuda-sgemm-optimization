@@ -6,8 +6,12 @@ A progressive, hardware-aware implementation of Single-Precision General Matrix 
 
 | Kernel | Optimization Technique | GFLOPS | % of cuBLAS |
 | :--- | :--- | :--- | :--- |
-| **01_naive** | 1 thread per element, uncoalesced global memory reads | Pending | - |
+| **01_naive** | 1 thread per element, uncoalesced global memory reads | ~300 | ~4% |
+| **02_coalesced** | Warp-aligned global memory coalescing | ~850 | ~12% |
 | **cuBLAS** | NVIDIA Vendor Library (Reference) | ~7,000 | 100% |
+
+## Key GPU Concepts Demonstrated
+- **Memory Coalescing:** Aligning contiguous 32-byte cache lines for warp threads.
 
 ## How to Build & Run
 ```bash

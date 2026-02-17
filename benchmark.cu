@@ -6,6 +6,7 @@
 #include <cublas_v2.h>
 
 #include "src/01_naive.cuh"
+#include "src/02_coalesced.cuh"
 
 #define CHECK_CUDA(call) { \
     cudaError_t err = call; \
@@ -76,6 +77,10 @@ int main() {
     dim3 grid1((N + 31) / 32, (M + 31) / 32);
     float g1 = run_and_time("01_naive       ", [&]() { sgemm_naive<<<grid1, block1>>>(M, N, K, d_A, d_B, d_C); }, start, stop, M, N, K, 5);
     out << "01_naive," << g1 << "\n";
+
+    // 2. Coalesced
+    float g2 = run_and_time("02_coalesced   ", [&]() { sgemm_coalesced<<<grid1, block1>>>(M, N, K, d_A, d_B, d_C); }, start, stop, M, N, K, 5);
+    out << "02_coalesced," << g2 << "\n";
 
     // cuBLAS (Golden Reference)
     cublasHandle_t handle;
