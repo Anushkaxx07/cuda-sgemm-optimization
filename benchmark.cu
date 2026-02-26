@@ -7,6 +7,7 @@
 
 #include "src/01_naive.cuh"
 #include "src/02_coalesced.cuh"
+#include "src/03_shared_mem.cuh"
 
 #define CHECK_CUDA(call) { \
     cudaError_t err = call; \
@@ -81,6 +82,10 @@ int main() {
     // 2. Coalesced
     float g2 = run_and_time("02_coalesced   ", [&]() { sgemm_coalesced<<<grid1, block1>>>(M, N, K, d_A, d_B, d_C); }, start, stop, M, N, K, 5);
     out << "02_coalesced," << g2 << "\n";
+
+    // 3. Shared Memory
+    float g3 = run_and_time("03_shared_mem  ", [&]() { sgemm_shared_mem<<<grid1, block1>>>(M, N, K, d_A, d_B, d_C); }, start, stop, M, N, K, 5);
+    out << "03_shared_mem," << g3 << "\n";
 
     // cuBLAS (Golden Reference)
     cublasHandle_t handle;
