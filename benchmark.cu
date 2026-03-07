@@ -8,6 +8,7 @@
 #include "src/01_naive.cuh"
 #include "src/02_coalesced.cuh"
 #include "src/03_shared_mem.cuh"
+#include "src/04_reg_tile.cuh"
 
 #define CHECK_CUDA(call) { \
     cudaError_t err = call; \
@@ -87,7 +88,13 @@ int main() {
     float g3 = run_and_time("03_shared_mem  ", [&]() { sgemm_shared_mem<<<grid1, block1>>>(M, N, K, d_A, d_B, d_C); }, start, stop, M, N, K, 5);
     out << "03_shared_mem," << g3 << "\n";
 
-    // cuBLAS (Golden Reference)
+    // 4. Register Tiling
+    dim3 block4(512);
+    dim3 grid4((N + 63) / 64, (M + 63) / 64);
+    float g4 = run_and_time("04_reg_tile    ", [&]() { sgemm_reg_tile<<<grid4, block4>>>(M, N, K, d_A, d_B, d_C); }, start, stop, M, N, K, 5);
+    out << "04_reg_tile," << g4 << "\n";
+
+    // 5. cuBLAS (Golden Reference)
     cublasHandle_t handle;
     cublasCreate(&handle);
     float alpha = 1.0f, beta = 0.0f;
