@@ -1,0 +1,6 @@
+Kernel,GFLOPS
+01_naive,533.145
+02_coalesced,606.201
+03_shared_mem,885.866
+04_reg_tile,2171.59
+cuBLAS,7323.14
