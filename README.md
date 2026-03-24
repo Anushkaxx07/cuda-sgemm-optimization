@@ -2,6 +2,8 @@
 
 A progressive, hardware-aware implementation of Single-Precision General Matrix Multiplication (SGEMM) in CUDA C++, benchmarking iterative microarchitectural optimizations against NVIDIA's vendor library (`cuBLAS`).
 
+![Benchmark Results](benchmark_plot.png)
+
 ## Performance Roadmap (Tesla T4 GPU)
 
 | Kernel | Optimization Technique | GFLOPS | % of cuBLAS |
@@ -21,4 +23,4 @@ A progressive, hardware-aware implementation of Single-Precision General Matrix 
 ```bash
 nvcc -O3 -arch=sm_75 benchmark.cu -lcublas -o benchmark
 ./benchmark
-```
+python3 plot_results.py
