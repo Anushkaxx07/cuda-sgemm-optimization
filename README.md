@@ -2,6 +2,10 @@
 
 A progressive, hardware-aware implementation of Single-Precision General Matrix Multiplication (SGEMM) in CUDA C++, benchmarking iterative microarchitectural optimizations against NVIDIA's vendor library (`cuBLAS`).
 
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Interactive_Drag_Race-10b981?style=for-the-badge&logo=nvidia)](https://anushkaxx07.github.io/cuda-sgemm-optimization/)
+
+> 🏎️ **Live Interactive Visualizer:** Experience the [CUDA SGEMM Grand Prix](https://anushkaxx07.github.io/cuda-sgemm-optimization/) in your browser! Watch all 5 GPU kernels race across a drag strip with velocities directly proportional to their real-world GFLOPS throughput—from the uncoalesced DRAM crawl (`01_naive`) to register-tiled hyperdrive (`04_reg_tile`) and NVIDIA `cuBLAS`.
+
 ![Benchmark Results](benchmark_plot.png)
 
 ## Performance Roadmap (Tesla T4 GPU)

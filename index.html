@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CUDA SGEMM Grand Prix | GPU Kernel Optimization Race</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes exhaust {
+      0% { opacity: 0.8; transform: scale(1) translateX(0); }
+      50% { opacity: 0.4; transform: scale(1.5) translateX(-10px); }
+      100% { opacity: 0; transform: scale(2) translateX(-20px); }
+    }
+    .exhaust-particle {
+      animation: exhaust 0.4s infinite;
+    }
+    .checkered-pattern {
+      background: repeating-conic-gradient(#fff 0% 25%, #111 0% 50%) 50% / 16px 16px;
+    }
+    .lane-stripes {
+      background-image: linear-gradient(90deg, rgba(255,255,255,0.2) 50%, transparent 50%);
+      background-size: 40px 2px;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased p-3 sm:p-6 select-none">
+
+  <!-- Header -->
+  <div class="max-w-6xl mx-auto mb-6 text-center">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/30 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+      NVIDIA Tesla T4 GPU Microarchitecture Benchmarks
+    </div>
+    <h1 class="text-3xl sm:text-5xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500">
+      CUDA SGEMM GRAND PRIX
+    </h1>
+    <p class="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto mt-1">
+      Visualizing GPU microarchitectural optimizations: from uncoalesced global memory crawl to on-chip SRAM register hyperdrive.
+    </p>
+  </div>
+
+  <!-- Main Container -->
+  <div class="max-w-6xl mx-auto space-y-6">
+
+    <!-- Race Track Container -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-2xl relative overflow-hidden backdrop-blur-md">
+      
+      <!-- Track Controls -->
+      <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800 mb-4">
+        <div class="flex items-center gap-3">
+          <button id="startRaceBtn" onclick="startRace()" class="px-5 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
+            <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            <span>START RACE</span>
+          </button>
+          <button id="resetRaceBtn" onclick="resetRace()" class="px-4 py-2.5 rounded-xl font-medium text-sm bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 active:scale-95 transition-all cursor-pointer">
+            Reset Track
+          </button>
+        </div>
+
+        <div class="flex items-center gap-4 text-xs font-medium text-slate-400">
+          <div class="flex items-center gap-2 bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800">
+            <span>Matrix Size:</span>
+            <span class="text-emerald-400 font-mono font-bold">2048 x 2048</span>
+          </div>
+          <div class="flex items-center gap-2 bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800">
+            <span>Track Length:</span>
+            <span class="text-cyan-400 font-mono font-bold">17.18 GFLOPs Work</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- The Drag Strip Lanes -->
+      <div class="relative bg-slate-950/90 rounded-xl border border-slate-800/80 p-3 sm:p-4 overflow-hidden space-y-3">
+        
+        <!-- Finish Line Indicator (Vertical) -->
+        <div class="absolute right-12 top-0 bottom-0 w-8 checkered-pattern opacity-80 z-0 border-l-2 border-r-2 border-yellow-400/80 shadow-[0_0_15px_rgba(234,179,8,0.3)]"></div>
+        <div class="absolute right-14 top-2 text-[10px] font-black uppercase text-yellow-400 tracking-widest rotate-90 origin-top-left z-10">FINISH</div>
+
+        <!-- Lane 1: 01_naive -->
+        <div class="lane relative bg-slate-900/60 rounded-lg p-2.5 border border-slate-800 transition-colors hover:border-slate-700 cursor-pointer" onclick="selectKernel(0)">
+          <div class="flex items-center justify-between text-xs mb-1 px-1">
+            <span class="font-bold text-red-400 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-red-500"></span> 01_naive (300 GFLOPS)
+            </span>
+            <span id="time-0" class="font-mono text-slate-400">Ready</span>
+          </div>
+          <div class="relative h-14 bg-slate-950/70 rounded-md overflow-hidden lane-stripes flex items-center">
+            <!-- Car Element -->
+            <div id="car-0" class="absolute left-2 transition-all duration-75 flex items-center" style="transform: translateX(0px);">
+              <!-- SVG Slow Vintage Tractor/Car -->
+              <svg class="w-16 h-10 drop-shadow-[0_2px_8px_rgba(239,68,68,0.4)]" viewBox="0 0 120 70">
+                <rect x="15" y="25" width="70" height="25" rx="6" fill="#ef4444" />
+                <rect x="25" y="10" width="35" height="20" rx="4" fill="#991b1b" />
+                <rect x="30" y="14" width="25" height="12" rx="2" fill="#fecaca" opacity="0.8"/>
+                <circle cx="30" cy="52" r="12" fill="#27272a" stroke="#71717a" stroke-width="3" />
+                <circle cx="75" cy="52" r="12" fill="#27272a" stroke="#71717a" stroke-width="3" />
+                <path d="M85 35 L105 38 L85 45 Z" fill="#b91c1c" />
+                <!-- Smoke puff -->
+                <circle cx="10" cy="28" r="4" fill="#71717a" class="exhaust-particle" />
+              </svg>
+              <span class="ml-2 text-[10px] font-mono text-red-300 font-bold hidden sm:inline">DRAM Choked (4%)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lane 2: 02_coalesced -->
+        <div class="lane relative bg-slate-900/60 rounded-lg p-2.5 border border-slate-800 transition-colors hover:border-slate-700 cursor-pointer" onclick="selectKernel(1)">
+          <div class="flex items-center justify-between text-xs mb-1 px-1">
+            <span class="font-bold text-amber-400 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-500"></span> 02_coalesced (850 GFLOPS)
+            </span>
+            <span id="time-1" class="font-mono text-slate-400">Ready</span>
+          </div>
+          <div class="relative h-14 bg-slate-950/70 rounded-md overflow-hidden lane-stripes flex items-center">
+            <div id="car-1" class="absolute left-2 transition-all duration-75 flex items-center" style="transform: translateX(0px);">
+              <!-- SVG Street Hatchback -->
+              <svg class="w-16 h-10 drop-shadow-[0_2px_8px_rgba(245,158,11,0.4)]" viewBox="0 0 120 70">
+                <path d="M15 45 L20 28 L45 20 L80 20 L100 35 L105 45 Z" fill="#f59e0b" />
+                <path d="M48 24 L75 24 L90 35 L48 35 Z" fill="#fef3c7" opacity="0.8"/>
+                <circle cx="35" cy="48" r="11" fill="#27272a" stroke="#d97706" stroke-width="3" />
+                <circle cx="85" cy="48" r="11" fill="#27272a" stroke="#d97706" stroke-width="3" />
+                <line x1="102" y1="36" x2="115" y2="38" stroke="#fef08a" stroke-width="2" />
+              </svg>
+              <span class="ml-2 text-[10px] font-mono text-amber-300 font-bold hidden sm:inline">Warp-Aligned (12%)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lane 3: 03_shared_mem -->
+        <div class="lane relative bg-slate-900/60 rounded-lg p-2.5 border border-slate-800 transition-colors hover:border-slate-700 cursor-pointer" onclick="selectKernel(2)">
+          <div class="flex items-center justify-between text-xs mb-1 px-1">
+            <span class="font-bold text-cyan-400 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-cyan-500"></span> 03_shared_mem (2,800 GFLOPS)
+            </span>
+            <span id="time-2" class="font-mono text-slate-400">Ready</span>
+          </div>
+          <div class="relative h-14 bg-slate-950/70 rounded-md overflow-hidden lane-stripes flex items-center">
+            <div id="car-2" class="absolute left-2 transition-all duration-75 flex items-center" style="transform: translateX(0px);">
+              <!-- SVG Sports Car -->
+              <svg class="w-18 h-10 drop-shadow-[0_2px_12px_rgba(6,182,212,0.5)]" viewBox="0 0 130 70">
+                <path d="M10 44 L25 30 L60 22 L95 24 L115 36 L120 44 Z" fill="#06b6d4" />
+                <path d="M55 25 L85 25 L102 36 L55 36 Z" fill="#cffafe" opacity="0.85" />
+                <!-- Rear spoiler -->
+                <path d="M8 32 L20 32 L15 40 Z" fill="#0891b2" />
+                <circle cx="35" cy="46" r="10" fill="#18181b" stroke="#06b6d4" stroke-width="3" />
+                <circle cx="95" cy="46" r="10" fill="#18181b" stroke="#06b6d4" stroke-width="3" />
+                <!-- Headlight beam -->
+                <polygon points="120,38 140,32 140,46" fill="#67e8f9" opacity="0.4" />
+              </svg>
+              <span class="ml-2 text-[10px] font-mono text-cyan-300 font-bold hidden sm:inline">On-Chip SRAM (40%)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lane 4: 04_reg_tile -->
+        <div class="lane relative bg-slate-900/60 rounded-lg p-2.5 border border-slate-800 transition-colors hover:border-slate-700 cursor-pointer" onclick="selectKernel(3)">
+          <div class="flex items-center justify-between text-xs mb-1 px-1">
+            <span class="font-bold text-emerald-400 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span> 04_reg_tile (5,200 GFLOPS)
+            </span>
+            <span id="time-3" class="font-mono text-slate-400">Ready</span>
+          </div>
+          <div class="relative h-14 bg-slate-950/70 rounded-md overflow-hidden lane-stripes flex items-center">
+            <div id="car-3" class="absolute left-2 transition-all duration-75 flex items-center" style="transform: translateX(0px);">
+              <!-- SVG F1 Supercar -->
+              <svg class="w-20 h-10 drop-shadow-[0_2px_14px_rgba(16,185,129,0.6)]" viewBox="0 0 140 70">
+                <!-- Front Wing -->
+                <rect x="115" y="38" width="18" height="6" rx="2" fill="#047857" />
+                <!-- Body -->
+                <path d="M15 40 L35 32 L75 28 L110 36 L125 40 Z" fill="#10b981" />
+                <!-- Cockpit -->
+                <path d="M55 24 L75 24 L85 32 L50 32 Z" fill="#a7f3d0" opacity="0.9" />
+                <!-- Rear Wing -->
+                <rect x="10" y="22" width="16" height="18" rx="2" fill="#065f46" />
+                <circle cx="36" cy="43" r="11" fill="#09090b" stroke="#10b981" stroke-width="3" />
+                <circle cx="98" cy="43" r="11" fill="#09090b" stroke="#10b981" stroke-width="3" />
+                <!-- Nitro flame -->
+                <polygon points="5,37 -10,34 -5,40" fill="#34d399" class="exhaust-particle" />
+              </svg>
+              <span class="ml-2 text-[10px] font-mono text-emerald-300 font-bold hidden sm:inline">Register ILP (75%)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lane 5: cuBLAS -->
+        <div class="lane relative bg-slate-900/60 rounded-lg p-2.5 border border-slate-800 transition-colors hover:border-slate-700 cursor-pointer" onclick="selectKernel(4)">
+          <div class="flex items-center justify-between text-xs mb-1 px-1">
+            <span class="font-bold text-purple-400 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-purple-500"></span> cuBLAS (7,323 GFLOPS)
+            </span>
+            <span id="time-4" class="font-mono text-slate-400">Ready</span>
+          </div>
+          <div class="relative h-14 bg-slate-950/70 rounded-md overflow-hidden lane-stripes flex items-center">
+            <div id="car-4" class="absolute left-2 transition-all duration-75 flex items-center" style="transform: translateX(0px);">
+              <!-- SVG Supersonic Jet / Rocket -->
+              <svg class="w-22 h-10 drop-shadow-[0_2px_16px_rgba(168,85,247,0.7)]" viewBox="0 0 150 70">
+                <!-- Jet Body -->
+                <path d="M15 35 L40 25 L105 28 L140 35 L105 42 L40 45 Z" fill="#a855f7" />
+                <!-- Wings -->
+                <polygon points="45,25 25,10 65,25" fill="#7e22ce" />
+                <polygon points="45,45 25,60 65,45" fill="#7e22ce" />
+                <polygon points="70,28 95,30 85,38 65,36" fill="#f3e8ff" opacity="0.9" />
+                <!-- Jet Thruster Flame -->
+                <polygon points="12,35 -15,30 -5,35 -15,40" fill="#c084fc" class="exhaust-particle" />
+              </svg>
+              <span class="ml-2 text-[10px] font-mono text-purple-300 font-bold hidden sm:inline">NVIDIA Golden (100%)</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Live Speedometer & Race Telemetry Bar -->
+      <div id="telemetryBanner" class="mt-4 p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex items-center gap-2">
+          <span class="text-slate-400">Race Status:</span>
+          <span id="raceStatusBadge" class="font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300">Ready on Starting Grid</span>
+        </div>
+        <div class="flex items-center gap-4 font-mono">
+          <div>Speedup: <span id="speedupMetric" class="text-emerald-400 font-bold">1.0x</span></div>
+          <div>Efficiency: <span id="efficiencyMetric" class="text-cyan-400 font-bold">Base</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Interactive Inspector Panel (Click a lane to see why it accelerates) -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Left: Kernel Hardware Microarchitecture Inspector -->
+      <div class="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl backdrop-blur-md">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+          <div class="flex items-center gap-2">
+            <span id="inspectorTag" class="w-3 h-3 rounded-full bg-emerald-400"></span>
+            <h2 id="inspectorTitle" class="text-lg font-bold text-slate-100">04_reg_tile (Register Tiling)</h2>
+          </div>
+          <span id="inspectorPct" class="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-emerald-950 text-emerald-400 border border-emerald-500/30">75% of cuBLAS</span>
+        </div>
+
+        <!-- Metric Badges -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div class="bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+            <div class="text-slate-400 text-[11px]">Throughput</div>
+            <div id="inspectorGflops" class="text-lg font-mono font-bold text-emerald-400">5,200 GFLOPS</div>
+          </div>
+          <div class="bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+            <div class="text-slate-400 text-[11px]">Memory Tier</div>
+            <div id="inspectorMem" class="text-sm font-semibold text-slate-200 mt-1">Registers (FF)</div>
+          </div>
+          <div class="bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+            <div class="text-slate-400 text-[11px]">Speedup vs Naive</div>
+            <div id="inspectorSpeedup" class="text-lg font-mono font-bold text-cyan-400">17.3x</div>
+          </div>
+          <div class="bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+            <div class="text-slate-400 text-[11px]">Primary Bottleneck</div>
+            <div id="inspectorBottleneck" class="text-xs font-medium text-amber-400 mt-1">Register Pressure</div>
+          </div>
+        </div>
+
+        <!-- Technical Description -->
+        <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 mb-4">
+          <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Microarchitectural Breakthrough:</h3>
+          <p id="inspectorExplanation" class="text-slate-300 text-sm leading-relaxed">
+            Each thread stores multiple accumulators (TM=8) inside fast hardware registers. This multiplies the arithmetic intensity by 8x, keeping ALUs saturated and hiding remaining DRAM memory latency through Instruction-Level Parallelism (ILP).
+          </p>
+        </div>
+
+        <!-- Code Snippet Preview -->
+        <div>
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+            <span>CUDA Kernel Implementation Snippet</span>
+            <span class="text-[10px] text-slate-500 font-mono">Tesla T4 Architecture (SM 7.5)</span>
+          </div>
+          <pre id="inspectorCode" class="p-3 bg-slate-950 rounded-xl border border-slate-800/80 font-mono text-xs text-emerald-300 overflow-x-auto leading-5"></pre>
+        </div>
+      </div>
+
+      <!-- Right: Performance Leaderboard & Tech Stack -->
+      <div class="space-y-6">
+        
+        <!-- Live Bar Chart Leaderboard -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl backdrop-blur-md">
+          <h3 class="text-sm font-bold text-slate-200 mb-4 flex items-center gap-2">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            GFLOPS Comparison
+          </h3>
+          <div class="space-y-3">
+            <div>
+              <div class="flex justify-between text-xs font-mono mb-1">
+                <span class="text-red-400">01_naive</span>
+                <span class="text-slate-400">300 GFLOPS</span>
+              </div>
+              <div class="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden">
+                <div class="bg-red-500 h-2.5 rounded-full" style="width: 4%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs font-mono mb-1">
+                <span class="text-amber-400">02_coalesced</span>
+                <span class="text-slate-400">850 GFLOPS</span>
+              </div>
+              <div class="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden">
+                <div class="bg-amber-500 h-2.5 rounded-full" style="width: 12%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs font-mono mb-1">
+                <span class="text-cyan-400">03_shared_mem</span>
+                <span class="text-slate-400">2,800 GFLOPS</span>
+              </div>
+              <div class="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden">
+                <div class="bg-cyan-500 h-2.5 rounded-full" style="width: 38%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs font-mono mb-1">
+                <span class="text-emerald-400 font-bold">04_reg_tile</span>
+                <span class="text-emerald-400 font-bold">5,200 GFLOPS</span>
+              </div>
+              <div class="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden">
+                <div class="bg-emerald-400 h-2.5 rounded-full shadow-[0_0_8px_rgba(52,211,153,0.5)]" style="width: 71%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs font-mono mb-1">
+                <span class="text-purple-400 font-bold">cuBLAS</span>
+                <span class="text-purple-400 font-bold">7,323 GFLOPS</span>
+              </div>
+              <div class="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden">
+                <div class="bg-purple-500 h-2.5 rounded-full" style="width: 100%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Unique Portfolio Card: "Why this project is different" -->
+        <div class="bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-500/30 rounded-2xl p-5 shadow-xl">
+          <div class="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
+            Interactive Portfolio Flex
+          </div>
+          <h4 class="text-sm font-bold text-slate-100 mb-2">Hosted on GitHub Pages</h4>
+          <p class="text-slate-400 text-xs leading-relaxed mb-3">
+            Recruiters and engineers don't just read code—they can run this live race in their browser to visualize how cache coalescing and register tiling eliminate memory stalls in real time.
+          </p>
+          <div class="text-[11px] text-emerald-300 font-mono bg-emerald-950/60 border border-emerald-800/40 rounded-lg p-2">
+            Built by Anushka Upadhyay &bull; IIIT Una
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    // Kernel Benchmark Dataset
+    const kernels = [
+      {
+        id: "01_naive",
+        name: "01_naive (Uncoalesced Reads)",
+        car: "Vintage Tractor",
+        gflops: 300,
+        pct: "4% of cuBLAS",
+        mem: "Global DRAM",
+        speedup: "1.0x (Baseline)",
+        bottleneck: "Memory Latency & Non-Coalesced Reads",
+        color: "text-red-400",
+        badgeBg: "bg-red-500",
+        explanation: "1 thread computes 1 output element. Memory reads from Matrix A and B are unaligned across warp threads, resulting in 32 separate 32-byte cache requests per warp transaction. DRAM bandwidth is completely saturated with overhead.",
+        code: `__global__ void sgemm_naive(int M, int N, int K, const float *A, const float *B, float *C) {\n    int row = blockIdx.y * blockDim.y + threadIdx.y;\n    int col = blockIdx.x * blockDim.x + threadIdx.x;\n    if (row < M && col < N) {\n        float sum = 0.0f;\n        for (int k = 0; k < K; ++k) {\n            sum += A[row * K + k] * B[k * N + col]; // Uncoalesced DRAM accesses\n        }\n        C[row * N + col] = sum;\n    }\n}`
+      },
+      {
+        id: "02_coalesced",
+        name: "02_coalesced (Warp-Aligned Access)",
+        car: "Street Hatchback",
+        gflops: 850,
+        pct: "12% of cuBLAS",
+        mem: "Global DRAM Coalesced",
+        speedup: "2.8x",
+        bottleneck: "DRAM Roundtrips (No Cache Reuse)",
+        color: "text-amber-400",
+        badgeBg: "bg-amber-500",
+        explanation: "Restructured thread indexing so adjacent threads in a warp access consecutive 32-bit floats in memory. The memory controller merges 32 separate memory requests into a single 128-byte cache-line transaction, boosting throughput by 2.8x.",
+        code: `__global__ void sgemm_coalesced(int M, int N, int K, const float *A, const float *B, float *C) {\n    int col = blockIdx.x * blockDim.x + threadIdx.x;\n    int row = blockIdx.y * blockDim.y + threadIdx.y;\n    // Threads in warp now read adjacent addresses sequentially\n    if (row < M && col < N) {\n        float sum = 0.0f;\n        for (int k = 0; k < K; ++k) sum += A[row * K + k] * B[k * N + col];\n        C[row * N + col] = sum;\n    }\n}`
+      },
+      {
+        id: "03_shared_mem",
+        name: "03_shared_mem (2D SRAM Tiling)",
+        car: "Sports Car",
+        gflops: 2800,
+        pct: "38% of cuBLAS",
+        mem: "On-Chip Shared Memory (SRAM)",
+        speedup: "9.3x",
+        bottleneck: "Thread-level Work per Load",
+        color: "text-cyan-400",
+        badgeBg: "bg-cyan-500",
+        explanation: "Threads cooperatively load 32x32 tiles of A and B into on-chip high-speed SRAM (__shared__). Each matrix float loaded from DRAM is reused 32 times by warp threads, cutting global DRAM traffic by 90%+.",
+        code: `__global__ void sgemm_shared_mem(int M, int N, int K, const float *A, const float *B, float *C) {\n    __shared__ float s_A[32][32];\n    __shared__ float s_B[32][32];\n    // Cooperatively load tile into SRAM\n    for (int t = 0; t < num_tiles; ++t) {\n        s_A[threadIdx.y][threadIdx.x] = A[...];\n        s_B[threadIdx.y][threadIdx.x] = B[...];\n        __syncthreads();\n        #pragma unroll\n        for (int k = 0; k < 32; ++k) sum += s_A[threadIdx.y][k] * s_B[k][threadIdx.x];\n        __syncthreads();\n    }\n}`
+      },
+      {
+        id: "04_reg_tile",
+        name: "04_reg_tile (1D/2D Register Tiling)",
+        car: "Formula 1 Supercar",
+        gflops: 5200,
+        pct: "75% of cuBLAS",
+        mem: "Hardware Registers + SRAM",
+        speedup: "17.3x",
+        bottleneck: "Register Pressure & Occupancy Balance",
+        color: "text-emerald-400",
+        badgeBg: "bg-emerald-500",
+        explanation: "Each thread calculates multiple outputs (TM=8) held directly in hardware registers. This increases arithmetic intensity, eliminates bank conflicts, and provides ample independent instructions for the GPU warp scheduler to hide memory latency.",
+        code: `__global__ void sgemm_reg_tile(int M, int N, int K, const float *A, const float *B, float *C) {\n    __shared__ float s_A[BM][BK];\n    __shared__ float s_B[BK][BN];\n    float threadResults[TM] = {0.0f}; // Held in registers\n    // Compute using registers for 8x reuse per thread\n    #pragma unroll\n    for (int tm = 0; tm < TM; ++tm) {\n        threadResults[tm] += s_A[(threadIdx.x / BN) * TM + tm][k] * b_val;\n    }\n}`
+      },
+      {
+        id: "cuBLAS",
+        name: "cuBLAS (NVIDIA Vendor Reference)",
+        car: "Supersonic Jet",
+        gflops: 7323,
+        pct: "100% (Golden Reference)",
+        mem: "Hand-Tuned Assembly / Tensor Pipeline",
+        speedup: "24.4x",
+        bottleneck: "Theoretical Hardware Limit (Tesla T4)",
+        color: "text-purple-400",
+        badgeBg: "bg-purple-500",
+        explanation: "NVIDIA's closed-source hand-tuned micro-assembly library using optimized instruction scheduling, double buffering, asynchronous copy (cp.async), and maximum hardware register utilization.",
+        code: `cublasHandle_t handle;\ncublasCreate(&handle);\nfloat alpha = 1.0f, beta = 0.0f;\n// Golden Reference Call\ncublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,\n            N, M, K, &alpha, d_B, N, d_A, K, &beta, d_C, N);\ncublasDestroy(handle);`
+      }
+    ];
+
+    let animationId = null;
+    let raceInProgress = false;
+
+    // Web Audio Synthesizer for race sounds (zero external assets needed)
+    function playTone(freq, type, duration) {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {
+        // AudioContext disabled or blocked
+      }
+    }
+
+    function selectKernel(idx) {
+      const k = kernels[idx];
+      document.getElementById("inspectorTitle").textContent = k.name;
+      document.getElementById("inspectorTitle").className = `text-lg font-bold ${k.color}`;
+      document.getElementById("inspectorTag").className = `w-3 h-3 rounded-full ${k.badgeBg}`;
+      document.getElementById("inspectorPct").textContent = k.pct;
+      document.getElementById("inspectorGflops").textContent = `${k.gflops.toLocaleString()} GFLOPS`;
+      document.getElementById("inspectorMem").textContent = k.mem;
+      document.getElementById("inspectorSpeedup").textContent = k.speedup;
+      document.getElementById("inspectorBottleneck").textContent = k.bottleneck;
+      document.getElementById("inspectorExplanation").textContent = k.explanation;
+      document.getElementById("inspectorCode").textContent = k.code;
+      playTone(400 + idx * 100, 'sine', 0.1);
+    }
+
+    function resetRace() {
+      if (animationId) cancelAnimationFrame(animationId);
+      raceInProgress = false;
+      for (let i = 0; i < 5; i++) {
+        const car = document.getElementById(`car-0`.replace('0', i));
+        car.style.transform = `translateX(0px)`;
+        document.getElementById(`time-${i}`).textContent = 'Ready';
+        document.getElementById(`time-${i}`).className = 'font-mono text-slate-400';
+      }
+      document.getElementById("raceStatusBadge").textContent = "Ready on Starting Grid";
+      document.getElementById("raceStatusBadge").className = "font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300";
+      document.getElementById("speedupMetric").textContent = "1.0x";
+      document.getElementById("efficiencyMetric").textContent = "Base";
+    }
+
+    function startRace() {
+      if (raceInProgress) resetRace();
+      raceInProgress = true;
+      playTone(520, 'square', 0.2);
+
+      const trackWidth = document.querySelector('.lane').clientWidth - 110;
+      const startTime = performance.now();
+      const finished = [false, false, false, false, false];
+
+      document.getElementById("raceStatusBadge").textContent = "RACE IN PROGRESS!";
+      document.getElementById("raceStatusBadge").className = "font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/30 animate-pulse";
+
+      // Speeds proportional to real GFLOPS
+      // cuBLAS reaches end in ~2.5 seconds
+      const maxGflops = kernels[4].gflops;
+      const baseDurationSec = 2.4; 
+
+      function step(now) {
+        const elapsed = (now - startTime) / 1000; // in seconds
+        let allDone = true;
+
+        for (let i = 0; i < kernels.length; i++) {
+          if (!finished[i]) {
+            allDone = false;
+            // Car speed is proportional to GFLOPS
+            const speed = (kernels[i].gflops / maxGflops);
+            const dist = (elapsed * speed / baseDurationSec) * trackWidth;
+
+            if (dist >= trackWidth) {
+              finished[i] = true;
+              document.getElementById(`car-${i}`).style.transform = `translateX(${trackWidth}px)`;
+              document.getElementById(`time-${i}`).textContent = `${elapsed.toFixed(2)}s (${kernels[i].gflops} GFLOPS)`;
+              document.getElementById(`time-${i}`).className = `font-mono font-bold ${kernels[i].color}`;
+              playTone(300 + i * 150, 'triangle', 0.15);
+            } else {
+              document.getElementById(`car-${i}`).style.transform = `translateX(${dist}px)`;
+              document.getElementById(`time-${i}`).textContent = `${elapsed.toFixed(1)}s`;
+            }
+          }
+        }
+
+        if (!allDone) {
+          animationId = requestAnimationFrame(step);
+        } else {
+          raceInProgress = false;
+          document.getElementById("raceStatusBadge").textContent = "RACE FINISHED! cuBLAS & 04_reg_tile DOMINATE";
+          document.getElementById("raceStatusBadge").className = "font-bold px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-500/30";
+          document.getElementById("speedupMetric").textContent = "17.3x vs Naive";
+          document.getElementById("efficiencyMetric").textContent = "75% of cuBLAS";
+        }
+      }
+
+      animationId = requestAnimationFrame(step);
+    }
+
+    // Default selection on load
+    selectKernel(3);
+  </script>
+</body>
+</html>
